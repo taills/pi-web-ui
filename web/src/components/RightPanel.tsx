@@ -18,6 +18,8 @@ import { useT } from "../i18n";
 import { useAppField } from "../app-globals";
 import { downloadFile, DOWNLOAD_FILE_NOT_FOUND } from "../download";
 import { HintTip } from "./HintTip";
+import { FileTransferDialog, type FileTransferRequest } from "./FileTransferDialog";
+import { isExtractableArchive } from "../file-transfer";
 import { applySashDrag, parseWeights } from "../panel-sash";
 // 宿主 UI 扩展点（issue #146）：右栏的 tab 条与文件右键菜单都走「slot 条目」这一条通道。
 import type { UiSlotEntry } from "../ui-slots";
@@ -164,7 +166,9 @@ export const RightPanel = memo(function RightPanel({
 	useEffect(() => {
 		try {
 			localStorage.setItem(LS_RP_SIZES, JSON.stringify(rpWeights));
-		} catch {}
+		} catch {
+			// Storage may be disabled; the current in-memory layout remains usable.
+		}
 	}, [rpWeights]);
 	const hasWidgets = widgets.some((w) => w.lines.length > 0);
 	const onSashDown = useCallback(
@@ -312,6 +316,7 @@ export const RightPanel = memo(function RightPanel({
 	 *  菜单本体在 App 里渲染（ContextMenu 是全局唯一的那个实例），点击回到本组件时，
 	 *  靠它才知道该操作谁。 */
 	const fileMenuRef = useRef<FileMenuCtx | null>(null);
+	const [transfer, setTransfer] = useState<FileTransferRequest | null>(null);
 	/** 隐藏的文件选择器：「上传文件」条目点它，选中的文件落到 fileMenuRef.dir。 */
 	const fileInput = useRef<HTMLInputElement>(null);
 
@@ -507,6 +512,26 @@ export const RightPanel = memo(function RightPanel({
 		(entry: UiSlotEntry) => {
 			const tg = fileMenuRef.current?.target;
 			switch (entry.id) {
+				case "host:file-compress":
+				case "host:file-extract":
+				case "host:file-compress-download":
+				case "host:file-upload-folder": {
+					if (!tg) break;
+					const action =
+						entry.id === "host:file-compress"
+							? "compress"
+							: entry.id === "host:file-extract"
+								? "extract"
+								: entry.id === "host:file-compress-download"
+									? "download"
+									: "upload";
+					setTransfer({
+						action,
+						path: absPathOf(tg.id),
+						dir: absPathOf(action === "upload" ? (fileMenuRef.current?.dir ?? currentPath) : parentWireOf(tg.id)),
+					});
+					break;
+				}
 				case "host:file-open-project":
 					openAsProject();
 					break;
@@ -580,6 +605,7 @@ export const RightPanel = memo(function RightPanel({
 		},
 		[
 			openAsProject,
+			currentPath,
 			pickFiles,
 			addWorkspaceRoot,
 			onPreview,
@@ -629,6 +655,13 @@ export const RightPanel = memo(function RightPanel({
 			const entries = (uiContextFile ?? []).map((entry) => {
 				if (entry.source !== "host") return entry;
 				switch (entry.id) {
+					case "host:file-upload-folder":
+						return !onMachineRoot ? entry : { ...entry, hidden: true };
+					case "host:file-compress":
+					case "host:file-compress-download":
+						return !isList && !protectedRoot ? entry : { ...entry, hidden: true };
+					case "host:file-extract":
+						return isFile && isExtractableArchive(target.label) ? entry : { ...entry, hidden: true };
 					case "host:file-upload":
 						if (isFile || onMachineRoot) return { ...entry, hidden: true };
 						return { ...entry, label: ctx.dir === currentPath ? t("uploadToCurrentDir") : t("uploadToFolder") };
@@ -1047,6 +1080,13 @@ export const RightPanel = memo(function RightPanel({
 													{/* 隐藏的文件选择器：右键菜单的「上传文件」用它（每次清空 value，选同一个
 										    文件两次也会触发 change；落点目录见 uploadPicked）。 */}
 													<input ref={fileInput} type="file" multiple hidden onChange={uploadPicked} />
+													{transfer && (
+														<FileTransferDialog
+															request={transfer}
+															onClose={() => setTransfer(null)}
+															onComplete={refreshList}
+														/>
+													)}
 													{/* 行内新建（右键菜单「新建文件/文件夹」）：落点目录见 creating.dir。 */}
 													{creating && (
 														<div className="file-item dir">

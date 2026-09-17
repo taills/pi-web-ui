@@ -113,6 +113,14 @@ export async function downloadFile(path: string, name: string): Promise<Download
 	}
 }
 
+/** Save an already-fetched temporary archive without requesting it a second time. */
+export async function saveDownloadBlob(blob: Blob, name: string): Promise<DownloadResult> {
+	const safeName = IS_WINDOWS ? sanitizeFileName(name) : name;
+	return window.showSaveFilePicker && window.isSecureContext
+		? saveViaFilePicker(blob, safeName)
+		: saveViaAnchor(blob, safeName);
+}
+
 /**
  * Save via the File System Access API: user picks the destination, the bytes
  * are written through a file handle. No download event, no Safe Browsing

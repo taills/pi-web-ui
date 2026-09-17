@@ -55,6 +55,17 @@
 - **HTML 渲染走目录映射的 HTTP**：`/api/preview/<工作区相对路径>`（机器浏览的绝对路径加 `__abs__/` 前缀，各段 URI 编码），iframe 文档 URL 自带文件所在目录，页面里的相对引用（`<link href="../web/src/styles.css">`、`./app.js`、图片…）按浏览器正常语义解析加载，无需改写 HTML；HTML 文档带沙箱 CSP（`sandbox`，`?allowJs=1` 时 `sandbox allow-scripts`，永不加 `allow-same-origin`），其余子资源按真实 content-type 直送；`..` 越界由 `workspacePath()` 拒绝（路由层归一化兜底则落进 SPA 404，不会泄露文件）。
 - 行号语义：**尾随换行不产生空行**（`countLines` 已修正），前后端 split 逻辑必须一致。
 
+### 文件管理右键：压缩、解压与文件夹上传
+
+- `contextmenu.file` 新增压缩、解压、上传文件夹、压缩并下载；复用统一菜单，在 `FileTransferDialog` 确认并显示错误/上传进度。
+- 压缩递归生成同目录 `{文件夹名}-{UTC时间}.tar.gz`；单文件生成 `{原文件名}.tar.gz`，已有同名归档不会被覆盖。
+- 解压仅对 ZIP、TAR、TAR.GZ/TGZ、GZ 显示；选择已有目标目录，冲突策略为跳过（默认）、覆盖文件、遇冲突停止。先在私有临时目录解包并完整检查冲突，再写目标目录。非冲突类 I/O 错误仍可能留下部分已写文件。
+- `server/file-archives.ts` 使用 Node 库，不调用 shell 或依赖系统 tar/unzip。拒绝归档越界路径、Windows 特殊路径、链接和设备文件；检查目标的符号链接，覆盖时先 unlink，防止修改硬链接指向的其他文件。上限为 20,000 项 / 1 GiB；解析 TAR 的解压流也有字节上限。
+- 两个引擎共用 `/api/file-transfer/archive` 和 `/api/file-transfer/upload`，位于现有鉴权中间件后，要求已连接的 clientId 与自定义请求头，路径规则与文件管理一致（包括机器浏览的绝对路径）。前端通过 `appUrl()` 保留反代前缀。
+- 文件夹上传保留顶层文件夹及递归层级，按文件顺序发送二进制 HTTP 请求（每文件 32 MiB，不走 base64/WS），不会覆盖已有文件。支持 File System Access 的浏览器也上传空目录；其余使用 `webkitdirectory` 回退，仅包含文件及父目录。失败时已上传部分保留。
+- 压缩并下载使用私有临时目录，HTTP 下载完成、断开或处理失败后清理；浏览器通过已有 blob 保存逻辑保存，不进行第二次下载请求。临时下载限 200 MiB，以控制浏览器内存；更大文件可先原地压缩再用原有流式下载。
+- 回归：`tests/unit/file-archives.test.ts`、`tests/unit/file-transfer-routes.test.ts`、`tests/file-archives-ui-test.mjs`（构建后运行，独立端口/数据目录，零模型调用）。
+
 ### 下载
 
 `web/src/download.ts`：不用 `<a download href>`（Chrome Safe Browsing 会拦截非 HTTPS 源的无信誉文件类型如 .zip/.exe），而是 fetch → blob 保存；>200MB 回退原生导航流式下载；失败 toast 显示服务端错误正文（`downloadFailed` i18n key）。

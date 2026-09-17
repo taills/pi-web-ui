@@ -31,6 +31,7 @@ import { VERSION, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { PROTOCOL_VERSION } from "./protocol-version.js";
 import { AgentService, workspacePath, QuiesceRejectedError } from "./agent-service.js";
 import { isAbsoluteWirePath, wireToAbs } from "./files-service.js";
+import { registerFileTransferRoutes } from "./file-transfer-routes.js";
 import { previewKind } from "./text-sniff.js";
 import { startControlServer } from "./control-socket.js";
 import { scheduleUploadCleanup } from "./uploads.js";
@@ -285,6 +286,8 @@ const SERVICE_INFO = toServiceInfo(ORIGIN);
 /** PI_WEB_TABS: the tabs this instance offers. null = all of them, as before. */
 const TABS = parseTabs();
 
+registerFileTransferRoutes(app, (clientId) => service.get(clientId)?.cwd);
+
 app.get("/api/health", (_req, res) => {
 	res.json({ ok: true, piVersion: VERSION, cwd: CWD, pid: process.pid, engine: ENGINE });
 });
@@ -383,6 +386,7 @@ app.get("/api/file", async (req, res) => {
  */
 app.get("/api/preview/*", async (req, res) => {
 	try {
+		// SAFETY: Express wildcard captures are indexed string route parameters.
 		const captured = String((req.params as unknown as Record<string, string>)[0] ?? "");
 		const ABS_MARKER = "__abs__/";
 		const cid = typeof req.query.clientId === "string" ? req.query.clientId : "";
@@ -531,6 +535,7 @@ const PLUGINS_DIR = join(DATA_DIR, "plugins");
 // /plugins-api/<id>/inbox。PI_WEB_TOKEN 鉴权（上方 app.use）自动覆盖；
 // 响应已在前面过了 express.json。注意不要在此 catch-all 里消费 body。
 app.all(["/plugins-api/:id/*", "/plugins-api/:id"], (req, res) => {
+	// SAFETY: Express wildcard captures are strings indexed by 0.
 	const rest = String((req.params as unknown as Record<string, string | undefined>)[0] ?? "");
 	pluginMgr.handleHttp(String(req.params.id ?? ""), req.method, rest, req, res);
 });
@@ -597,7 +602,7 @@ app.use((req, res, next) => {
 	proxyHttp(hit, req, res);
 });
 app.get("/plugins/:id/client/*", (req, res) => {
-	// express 4 的通配参数在运行时落在 params[0]，但类型声明里没有 —— 显式取
+	// SAFETY: express 4 的通配参数在运行时落在 params[0],但类型声明里没有 -- 显式取
 	const rest = String((req.params as unknown as Record<string, string | undefined>)[0] ?? "");
 	// 特权 DOM 门禁：声明了 dom 能力的插件，其 bundle 需用户逐个授权后才下发
 	// （同源 bundle 技术上拦不住 DOM 访问，门只能放在这里；见 server/plugin-dom.ts）。
@@ -871,12 +876,12 @@ export interface TerminalManagerLike {
 		fallbackCwd: string,
 		title?: string,
 		opts?: { forceBash?: boolean; locale?: string },
-	): unknown;
+	): void;
 	input(id: string, data: string): void;
 	resize(id: string, cols: number, rows: number): void;
 	kill(id: string): void;
 	rename(id: string, title: string): void;
-	runCommand(id: string, command: CommandDef, cols: number, rows: number, fallbackCwd: string): unknown;
+	runCommand(id: string, command: CommandDef, cols: number, rows: number, fallbackCwd: string): void;
 }
 
 export interface DispatchSession {
@@ -1354,6 +1359,7 @@ service.pluginStopBgTask = (taskId) => pluginMgr.stopPluginBgTask(taskId);
 // {ok:false}，绝不抛错炸进程。
 // ---------------------------------------------------------------------------
 {
+	// SAFETY: This compatibility bridge only assigns optional plugin hooks; consumers test their presence.
 	const pm = pluginMgr as unknown as Record<string, unknown>;
 	/** 注入函数间复用的对话条目形状（与 agent-service 的 *ForPlugins 方法对齐）。 */
 	type PluginConvListItem = { id: string; title: string; cwd: string; kind: string; isStreaming: boolean };
@@ -1377,10 +1383,9 @@ service.pluginStopBgTask = (taskId) => pluginMgr.stopPluginBgTask(taskId);
 		steerForPlugins?: (cid: string, t: string) => Promise<{ ok: boolean; error?: string }>;
 	};
 	/** 挑一个客户端会话：标准 pi 引擎走 service.pluginClient()，DSH/未知引擎无此方法即 undefined。 */
-	const pickClient = (): unknown => {
+	const pickClient = (): ReturnType<AgentService["pluginClient"]> => {
 		try {
-			const svc = service as unknown as { pluginClient?: () => unknown };
-			return typeof svc.pluginClient === "function" ? svc.pluginClient() : undefined;
+			return service instanceof AgentService ? service.pluginClient() : undefined;
 		} catch {
 			return undefined;
 		}
@@ -1454,6 +1459,7 @@ service.pluginStopBgTask = (taskId) => pluginMgr.stopPluginBgTask(taskId);
 	// 标准 pi 引擎走 service.completeForPlugins；DSH/未知引擎回 {ok:false}，绝不抛错。
 	(pm as any).llmProvider = async (pluginId: string, req: unknown) => {
 		try {
+			// SAFETY: Only invoked after the optional method is checked; request fields are narrowed below.
 			const svc = service as unknown as {
 				completeForPlugins?: (
 					pluginId: string,
@@ -1958,6 +1964,7 @@ wss.on("connection", (ws) => {
 				cs.pushSettings();
 				break;
 			case "set_settings":
+				// SAFETY: Both dispatch engines validate the explicitly enumerated settings fields below.
 				void (cs as unknown as { setSettings: (p: Record<string, unknown>) => Promise<void> }).setSettings({
 					promptMode: msg.promptMode,
 					customSystemPrompt: msg.customSystemPrompt,

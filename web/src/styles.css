@@ -1,5 +1,44 @@
 /* pi-web-ui — dark theme, pi-flavored */
 
+/* File manager archive / folder transfer dialog. Native dialog traps focus. */
+.file-transfer-dialog {
+	background: var(--bg-elev);
+	color: var(--text);
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 24px;
+	width: min(520px, calc(100vw - 32px));
+	max-height: 85vh;
+	overflow: auto;
+}
+.file-transfer-dialog::backdrop {
+	background: #0008;
+}
+.file-transfer-dialog label {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 12px 0;
+}
+.file-transfer-dialog input,
+.file-transfer-dialog select {
+	width: 100%;
+	min-width: 0;
+}
+.file-transfer-dialog p {
+	color: var(--text-dim);
+	font-size: 13px;
+}
+.file-transfer-path {
+	overflow-wrap: anywhere;
+}
+.file-transfer-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 20px;
+}
+
 :root {
 	--bg: #0d0e12;
 	--bg-elev: #14161c;

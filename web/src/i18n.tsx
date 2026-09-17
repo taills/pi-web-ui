@@ -312,6 +312,21 @@ export const zh = {
 	pluginMountFailed: "插件 {name} 挂载失败",
 	liveOutputOmitted: "…[前 {n} 字符已省略]…\n",
 	uploadToFolder: "上传文件到此文件夹",
+	fileCompress: "压缩",
+	fileExtract: "解压",
+	fileCompressDownload: "压缩并下载",
+	fileUploadFolder: "上传文件夹",
+	fileChooseFolder: "选择文件夹",
+	fileExtractDestination: "解压到（已有目录，留空为工作区）",
+	fileConflictPolicy: "遇到已有文件",
+	fileConflictSkip: "跳过（默认）",
+	fileConflictOverwrite: "覆盖文件（不替换目录）",
+	fileConflictError: "停止，不写入任何文件",
+	fileArchiveLimits: "ZIP / TAR / TAR.GZ / TGZ / GZ；最多 20,000 项、解压后 1 GiB。不接受链接或特殊文件。",
+	fileFolderUploadHint:
+		"保留所选文件夹名称和层级，逐个上传（单文件最多 32 MiB）。已有文件不会被覆盖，失败时已上传的文件会保留。支持 File System Access 的浏览器还会上传空目录，其他浏览器仅上传文件及其父目录。",
+	fileTransferBusy: "正在处理，请勿关闭…",
+	fileTransferFailed: "操作未完成：{error}",
 	uploadToCurrentDir: "上传文件到当前目录",
 	openAsProject: "以项目打开",
 	fileOpenPreview: "打开预览",
@@ -1691,6 +1706,22 @@ const en: Record<keyof typeof zh, string> = {
 	pluginMountFailed: "Plugin {name} failed to mount",
 	liveOutputOmitted: "…[{n} chars omitted above]…\n",
 	uploadToFolder: "Upload files to this folder",
+	fileCompress: "Compress",
+	fileExtract: "Extract",
+	fileCompressDownload: "Compress and download",
+	fileUploadFolder: "Upload folder",
+	fileChooseFolder: "Choose folder",
+	fileExtractDestination: "Extract to (existing directory; empty means workspace)",
+	fileConflictPolicy: "Existing files",
+	fileConflictSkip: "Skip (default)",
+	fileConflictOverwrite: "Overwrite files (never replace directories)",
+	fileConflictError: "Stop without writing any files",
+	fileArchiveLimits:
+		"ZIP / TAR / TAR.GZ / TGZ / GZ; up to 20,000 entries and 1 GiB expanded. Links and special files are rejected.",
+	fileFolderUploadHint:
+		"Keeps the selected folder name and hierarchy, uploading one file at a time (32 MiB per file). Existing files are never overwritten; completed uploads remain after a failure. File System Access browsers also preserve empty directories; other browsers upload files and their parent folders.",
+	fileTransferBusy: "Working, please keep this dialog open…",
+	fileTransferFailed: "Operation incomplete: {error}",
 	uploadToCurrentDir: "Upload files to current directory",
 	openAsProject: "Open as project",
 	fileOpenPreview: "Open preview",
@@ -2944,8 +2975,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 							nativeName: pack.nativeName || p.nativeName,
 							strings: pack.strings,
 						});
+						return true;
 					} catch {
 						// One pack failed — the rest still load; missing keys fall back to English.
+						return false;
 					}
 				}),
 		);
